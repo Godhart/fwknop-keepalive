@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=./profile.schema.json
+# Замените сервер и ОБА ключа перед использованием. Это не рабочие секреты.
+version: 1
+name: My server
+server: spa.example.org
+spa_port: 62201
+access: tcp/22,tcp/443
+allow_ip: source
+username: mobile
+interval_seconds: 60
+access_timeout_seconds: 300
+key_base64: REPLACE_WITH_SERVER_KEY_BASE64
+hmac_key_base64: REPLACE_WITH_SERVER_HMAC_KEY_BASE64
