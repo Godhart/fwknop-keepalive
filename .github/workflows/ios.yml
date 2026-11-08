@@ -1,0 +1,49 @@
+name: iOS
+on:
+  push:
+    paths: ['ios/**', 'android/app/src/main/cpp/**', 'profile.schema.json', '.github/workflows/ios.yml']
+  pull_request:
+    paths: ['ios/**', 'android/app/src/main/cpp/**', 'profile.schema.json', '.github/workflows/ios.yml']
+  workflow_dispatch:
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          cd ios
+          xcodegen generate
+      - name: Choose available iPhone simulator
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          data=json.loads(subprocess.check_output(["xcrun","simctl","list","devices","available","-j"]))
+          phones=[d for runtime, devices in data["devices"].items() if "iOS" in runtime for d in devices if d["name"].startswith("iPhone")]
+          if not phones:
+              raise SystemExit("No iPhone simulator available")
+          with open(os.environ["GITHUB_ENV"],"a") as f:
+              f.write("SPA_SIMULATOR="+phones[0]["udid"]+"\n")
+          PY
+      - name: Build and test on simulator
+        working-directory: ios
+        run: |
+          xcodebuild -project SpaKeepalive.xcodeproj -scheme SpaKeepalive             -destination "platform=iOS Simulator,id=$SPA_SIMULATOR"             -derivedDataPath build -resultBundlePath TestResults.xcresult             CODE_SIGNING_ALLOWED=NO test
+      - name: Compile device build without signing
+        working-directory: ios
+        run: |
+          xcodebuild -project SpaKeepalive.xcodeproj -scheme SpaKeepalive             -destination 'generic/platform=iOS' -derivedDataPath build-device             CODE_SIGNING_ALLOWED=NO build
+      - name: Package simulator app
+        working-directory: ios
+        run: ditto -c -k --keepParent build/Build/Products/Debug-iphonesimulator/SpaKeepalive.app SpaKeepalive-simulator.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spa-keepalive-ios-simulator
+          path: ios/SpaKeepalive-simulator.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-test-results
+          path: ios/TestResults.xcresult

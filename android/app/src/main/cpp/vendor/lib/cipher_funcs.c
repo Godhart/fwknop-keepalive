@@ -57,6 +57,10 @@ DECLARE_TEST_SUITE(digest_test, "Cipher functions test suite");
 void
 get_random_data(unsigned char *data, const size_t len)
 {
+#ifdef SPA_USE_ARC4RANDOM
+    /* iOS: system CSPRNG, without a filesystem or time-based fallback. */
+    arc4random_buf(data, len);
+#else
     uint32_t    i;
 #ifdef WIN32
 	int				rnum;
@@ -108,7 +112,7 @@ get_random_data(unsigned char *data, const size_t len)
     }
 
 #endif
-
+#endif /* SPA_USE_ARC4RANDOM */
 }
 
 

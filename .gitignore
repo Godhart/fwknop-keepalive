@@ -19,3 +19,10 @@ vault.yml
 *.spa-update.lock
 
 android/**/.cxx/
+
+ios/*.xcodeproj/
+ios/Info.plist
+ios/build/
+ios/build-device/
+ios/*.xcresult/
+ios/*-simulator.zip

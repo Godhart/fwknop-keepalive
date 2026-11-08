@@ -94,6 +94,20 @@ fko_set_rand_value(fko_ctx_t ctx, const char * const new_val)
         return(FKO_SUCCESS);
     }
 
+#ifdef SPA_USE_ARC4RANDOM
+    /* Generate the complete decimal nonce directly with the OS CSPRNG. */
+    {
+        size_t i;
+        char *value = calloc(1, FKO_RAND_VAL_SIZE + 1);
+        if(value == NULL) return FKO_ERROR_MEMORY_ALLOCATION;
+        for(i = 0; i < FKO_RAND_VAL_SIZE; i++)
+            value[i] = (char)('0' + arc4random_uniform(10));
+        free(ctx->rand_val);
+        ctx->rand_val = value;
+        ctx->state |= FKO_DATA_MODIFIED;
+        return FKO_SUCCESS;
+    }
+#endif
 #ifdef WIN32
 	_ftime_s(&tb);
 	seed = ((tb.time * 1000) + tb.millitm) & 0xFFFFFFFF;

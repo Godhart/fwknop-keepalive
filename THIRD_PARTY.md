@@ -3,7 +3,7 @@
 - libfko / fwknop 2.6.11: https://www.cipherdyne.org/fwknop/download/fwknop-2.6.11.tar.gz
   SHA256 архива, полученного при подготовке: `bcb4e0e2eb5fcece5083d506da8471f68e33fb6b17d9379c71427a95f9ca1ec8`.
   В `android/app/src/main/cpp/vendor` скопированы исходные `.c`/`.h` каталогов
-  lib/common, кроме CUnit-тестов. Они не изменены. COPYING/AUTHORS/CREDITS включены.
+  lib/common, кроме CUnit-тестов. В 0.4.0 cipher_funcs.c и fko_rand_value.c дополнены условной iOS-веткой SPA_USE_ARC4RANDOM (системный CSPRNG); остальные файлы не изменены. COPYING/AUTHORS/CREDITS включены.
   `config.h` взят из upstream Android-примера: версия обновлена до 2.6.11,
   ненужные HAVE_LIBPCAP/HAVE_LIBGDBM убраны. JNI и packet.c — код этого проекта.
   Лицензия GPL-2.0-or-later.

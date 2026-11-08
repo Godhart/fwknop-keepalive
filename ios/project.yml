@@ -1,0 +1,70 @@
+name: SpaKeepalive
+options:
+  bundleIdPrefix: org.example
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.4.0"
+    CURRENT_PROJECT_VERSION: "4"
+    TARGETED_DEVICE_FAMILY: "1,2"
+targets:
+  SpaKeepalive:
+    type: application
+    platform: iOS
+    sources:
+      - path: SpaKeepalive
+      - path: Native
+      - path: ../android/app/src/main/cpp/vendor/lib
+        excludes: ["*.h"]
+      - path: ../android/app/src/main/cpp/vendor/common/fko_util.c
+      - path: ../android/app/src/main/cpp/vendor/common/strlcpy.c
+      - path: ../android/app/src/main/cpp/vendor/common/strlcat.c
+      - path: ../android/app/src/main/cpp/packet.c
+      - path: ../profile.schema.json
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.spakeepalive.ios
+        SWIFT_OBJC_BRIDGING_HEADER: Native/Bridge.h
+        GCC_PREPROCESSOR_DEFINITIONS: ["$(inherited)", "HAVE_CONFIG_H=1"]
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/Native"
+          - "$(SRCROOT)/../android/app/src/main/cpp/vendor/lib"
+          - "$(SRCROOT)/../android/app/src/main/cpp/vendor/common"
+          - "$(SRCROOT)/../android/app/src/main/cpp"
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: SPA Keepalive
+        UILaunchScreen: {}
+        NSCameraUsageDescription: Сканирование QR с настройками SPA.
+        NSLocalNetworkUsageDescription: Отправка SPA на сервер в вашей локальной сети.
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        LSSupportsOpeningDocumentsInPlace: YES
+        UIFileSharingEnabled: NO
+  SpaKeepaliveTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+        excludes: [Fixtures]
+      - path: Tests/Fixtures
+        buildPhase: resources
+    dependencies:
+      - target: SpaKeepalive
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  SpaKeepalive:
+    build:
+      targets:
+        SpaKeepalive: all
+        SpaKeepaliveTests: [test]
+    test:
+      targets: [SpaKeepaliveTests]

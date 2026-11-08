@@ -1,0 +1,1 @@
+{"version": 1, "name": "iOS compatibility test", "server": "127.0.0.1", "spa_port": 62201, "access": "tcp/22,tcp/443", "allow_ip": "source", "username": "mobile", "interval_seconds": 15, "access_timeout_seconds": 60, "key_base64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", "hmac_key_base64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8="}

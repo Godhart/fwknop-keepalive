@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-11-08
+
+- Первый iOS-клиент (iOS 16+): SwiftUI, QR/JSON, совместимое шифрование v2, Keychain.
+- До 16 профилей; ручная отправка, циклы только на переднем плане, SPA → HTTPS-сайт.
+- Проект XcodeGen, XCTest с Python fixture и GitHub Actions на macOS.
+- iOS-конфигурация общей libfko использует системный arc4random без временного fallback.
+- Android и Python сохраняют функциональную версию 0.3.0; wire-форматы не изменены.
+
+
 ## 0.3.0 — 2026-11-08
 
 - Опция `generate --protect` и переключатель GUI: AES-256-GCM для JSON, QR и bash.

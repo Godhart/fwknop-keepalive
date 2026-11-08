@@ -10,12 +10,13 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from spa_config import generate
 from test_tools import profile
 
-@pytest.fixture(scope='module')
-def lib(tmp_path_factory):
+@pytest.fixture(scope='module', params=['android', 'ios'])
+def lib(tmp_path_factory, request):
     root=Path(__file__).resolve().parents[1]/'android/app/src/main/cpp'
     so=tmp_path_factory.mktemp('native')/'libspa.so'
+    config = Path(__file__).resolve().parents[1]/'ios/Native' if request.param == 'ios' else root
     files=list((root/'vendor/lib').glob('*.c'))+[root/'vendor/common'/f for f in ['fko_util.c','strlcpy.c','strlcat.c']]+[root/'packet.c']
-    subprocess.run(['gcc','-shared','-fPIC','-DHAVE_CONFIG_H=1','-I'+str(root),'-I'+str(root/'vendor/lib'),'-I'+str(root/'vendor/common'),*map(str,files),'-o',str(so)],check=True)
+    subprocess.run(['gcc','-shared','-fPIC','-DHAVE_CONFIG_H=1','-I'+str(config),'-I'+str(root),'-I'+str(root/'vendor/lib'),'-I'+str(root/'vendor/common'),*map(str,files),'-o',str(so)],check=True)
     lib=C.CDLL(str(so))
     lib.spa_packet.argtypes=[C.c_char_p,C.c_char_p,C.c_int,C.c_char_p,C.c_int,C.c_char_p,C.c_int,C.POINTER(C.c_void_p)]
     lib.fko_new_with_data.argtypes=[C.POINTER(C.c_void_p),C.c_char_p,C.c_char_p,C.c_int,C.c_int,C.c_char_p,C.c_int,C.c_int]
