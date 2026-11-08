@@ -9,7 +9,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y fwknop-client
-      - run: pip install -r tools/requirements-vault.txt pytest
+      - run: pip install -r tools/requirements-vault.txt pytest pexpect
       - run: FWKNOP_TEST_BINARY="$(command -v fwknop)" python -m pytest -q tests
   android:
     runs-on: ubuntu-24.04
@@ -23,7 +23,7 @@ jobs:
         with:
           packages: platform-tools
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.0.13004108" "cmake;3.22.1"
-      - run: chmod +x gradlew && ./gradlew :app:assembleDebug :app:lintDebug
+      - run: chmod +x gradlew && ./gradlew :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest
         working-directory: android
       - uses: actions/upload-artifact@v4
         with:

@@ -1,18 +1,19 @@
 """Optional local YAML editor; imports the same validation/export functions as CLI."""
 from pathlib import Path
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 import customtkinter as ctk
 import yaml
+from profile_crypto import is_encrypted, unlock
 from spa_config import ROOT, UniqueLoader, validate, generate, private_write, with_new_keys
 
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title('SPA Keepalive 0.2.0 — редактор профиля')
+        self.title('SPA Keepalive 0.3.0 — редактор профиля')
         self.geometry('880x700')
         ctk.CTkLabel(self,text='YAML содержит секретные ключи. Генерация QR выполняется локально.').pack(pady=8)
         bar=ctk.CTkFrame(self); bar.pack(fill='x',padx=12)
-        for label, fn in [('Открыть',self.open),('Сохранить как',self.save),('Проверить',self.check),('Создать QR и bash',self.export)]:
+        for label, fn in [('Открыть',self.open),('Сохранить YAML',self.save),('Проверить',self.check),('Создать QR и bash',self.export)]:
             ctk.CTkButton(bar,text=label,command=fn,width=160).pack(side='left',padx=5,pady=8)
         keys=ctk.CTkFrame(self); keys.pack(fill='x',padx=12,pady=6)
         ctk.CTkLabel(keys,text='Ключ: байт').pack(side='left',padx=4)
@@ -25,6 +26,8 @@ class App(ctk.CTk):
         self.encrypt_vault=ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(vault,text='Шифровать открытый / новый vault',variable=self.encrypt_vault).pack(side='left',padx=6,pady=8)
         ctk.CTkButton(vault,text='Обновить vault.yaml',command=self.update_vault).pack(side='right',padx=6)
+        self.protect_export=ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(self,text='Шифровать JSON, QR и bash паролем',variable=self.protect_export).pack(pady=5)
         self.editor=ctk.CTkTextbox(self,font=('monospace',14)); self.editor.pack(fill='both',expand=True,padx=12,pady=12)
         self.set_profile(with_new_keys(yaml.safe_load((ROOT/'profile.example.yaml').read_text())))
     def set_profile(self,c):
@@ -69,8 +72,14 @@ class App(ctk.CTk):
         if path:
             def action():
                 p=Path(path)
-                if p.stat().st_size>8192: raise ValueError('Файл слишком велик')
-                text=p.read_text(); self.editor.delete('1.0','end'); self.editor.insert('1.0',text)
+                if p.stat().st_size>16384: raise ValueError('Файл слишком велик')
+                text=p.read_text()
+                data=yaml.load(text,Loader=UniqueLoader)
+                if is_encrypted(data):
+                    password=simpledialog.askstring('Пароль','Пароль профиля:',show='*',parent=self)
+                    if password is None:return
+                    text=yaml.safe_dump(validate(unlock(data,password)),allow_unicode=True,sort_keys=False)
+                self.editor.delete('1.0','end'); self.editor.insert('1.0',text)
             self.safe(action)
     def save(self):
         path=filedialog.asksaveasfilename(defaultextension='.yaml')
@@ -82,7 +91,14 @@ class App(ctk.CTk):
         parent=filedialog.askdirectory(title='Родительский каталог для нового каталога spa-export')
         if parent:
             def action():
-                generate(self.config_data(),Path(parent)/'spa-export')
+                password=None
+                if self.protect_export.get():
+                    password=simpledialog.askstring('Защита профиля','Пароль для JSON, QR и bash:',show='*',parent=self)
+                    if password is None:return
+                    confirm=simpledialog.askstring('Подтверждение','Повторите пароль:',show='*',parent=self)
+                    if confirm is None:return
+                    if not password or password!=confirm:raise ValueError('Пустой пароль или пароли не совпадают')
+                generate(self.config_data(),Path(parent)/'spa-export',password=password)
                 messagebox.showinfo('Готово','Создан каталог spa-export: QR, JSON и keepalive.sh')
             self.safe(action)
 if __name__=='__main__': App().mainloop()

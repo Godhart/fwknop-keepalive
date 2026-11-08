@@ -1,4 +1,4 @@
-'''SPA Keepalive 0.2.0: validate YAML, generate offline QR and fwknop loop.'''
+'''SPA Keepalive 0.3.0: validate YAML, generate offline QR and fwknop loop.'''
 import argparse
 import base64
 import io
@@ -11,6 +11,7 @@ import sys
 import yaml
 import jsonschema
 import qrcode
+from profile_crypto import is_encrypted, protect, unlock, ask_password
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = json.loads((ROOT / 'profile.schema.json').read_text())
@@ -54,10 +55,12 @@ def validate(c):
         raise ValueError('Используйте разные AES и HMAC ключи')
     return c
 
-def load(path):
-    if Path(path).stat().st_size > 8192:
+def load(path, password=None):
+    if Path(path).stat().st_size > 16384:
         raise ValueError('Слишком большой файл профиля')
-    return validate(yaml.load(Path(path).read_text(encoding='utf-8'), Loader=UniqueLoader))
+    data = yaml.load(Path(path).read_text(encoding='utf-8'), Loader=UniqueLoader)
+    if is_encrypted(data): data = unlock(data, password if password is not None else ask_password())
+    return validate(data)
 
 def private_write(path, data, mode=0o600):
     # Exclusive create prevents overwriting another profile or following a symlink.
@@ -65,26 +68,24 @@ def private_write(path, data, mode=0o600):
     with os.fdopen(fd, 'wb') as f:
         f.write(data)
 
-def script(c):
+def script(c, password=None, envelope=None):
     validate(c)
-    fields = {
-        'SPA_SERVER':c['server'], 'SPA_SERVER_PORT':c['spa_port'],
-        'SPA_SERVER_PROTO':'udp', 'ACCESS':c['access'],
-        'ALLOW_IP':'0.0.0.0' if c['allow_ip']=='source' else c['allow_ip'],
-        'SPOOF_USER':c['username'], 'FW_TIMEOUT':c['access_timeout_seconds'],
-        'KEY_BASE64':c['key_base64'], 'HMAC_KEY_BASE64':c['hmac_key_base64'],
-        'USE_HMAC':'Y','HMAC_DIGEST_TYPE':'SHA256','DIGEST_TYPE':'SHA256',
-        'ENCRYPTION_MODE':'CBC','SERVER_RESOLVE_IPV4':'Y'}
-    rc = '[keepalive]\n' + '\n'.join(f'{k} {v}' for k,v in fields.items()) + '\n'
-    return '''#!/usr/bin/env bash
-# SPA Keepalive 0.2.0. Contains secrets: chmod 700; do not publish.
-# Every iteration calls fwknop afresh (new timestamp, nonce and salt).
+    from rc_format import render_rc
+    mode = """#!/usr/bin/env bash
+# SPA Keepalive 0.3.0. Default: one send. --loop: periodic sends.
 set -euo pipefail
 umask 077
-command -v fwknop >/dev/null || { echo "Install fwknop-client" >&2; exit 127; }
-command -v timeout >/dev/null || { echo "Install coreutils" >&2; exit 127; }
-command -v flock >/dev/null || { echo "Install util-linux" >&2; exit 127; }
-# Prevent concurrent copies of this same script on Linux.
+mode=once
+if (( $# > 1 )); then echo "Usage: $0 [--once|--loop]" >&2; exit 2; fi
+case "${1:---once}" in
+  --once) mode=once ;;
+  --loop) mode=loop ;;
+  --help|-h) echo "Usage: $0 [--once|--loop]"; exit 0 ;;
+  *) echo "Usage: $0 [--once|--loop]" >&2; exit 2 ;;
+esac
+for tool in fwknop timeout flock; do
+  command -v "$tool" >/dev/null || { echo "Missing: $tool" >&2; exit 127; }
+done
 exec 9<"$0"
 flock -n 9 || { echo "Already running" >&2; exit 1; }
 work=$(mktemp -d)
@@ -96,10 +97,19 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-cat >"$work/fwknoprc" <<'SPA_PRIVATE_CONFIG'
-''' + rc + '''SPA_PRIVATE_CONFIG
-while true; do
-  # Keep rc secrets out of argv; --no-save-args avoids persisted invocation state.
+"""
+    if password is not None or envelope is not None:
+        payload = envelope if envelope is not None else protect(c, password)
+        # Embed runtime, not the clear profile or password. No extra project files needed.
+        runtime = (ROOT/'tools/profile_crypto.py').read_text()
+        runtime += '\n' + (ROOT/'tools/rc_format.py').read_text()
+        runtime += '\ntry:\n    c = unlock(json.loads(' + repr(json.dumps(payload)) + '), ask_password())\n'
+        runtime += "    import os, sys\n    fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)\n    with os.fdopen(fd, 'w') as out: out.write(render_rc(c))\n"
+        runtime += "except Exception:\n    import sys\n    print('Не удалось открыть профиль: проверьте пароль и наличие Python cryptography', file=sys.stderr)\n    sys.exit(1)\n"
+        mode += 'python3 - "$work/fwknoprc" <<\'SPA_PYTHON_RUNTIME\'\n' + runtime + '\nSPA_PYTHON_RUNTIME\n'
+    else:
+        mode += "cat >\"$work/fwknoprc\" <<'SPA_PRIVATE_CONFIG'\n" + render_rc(c) + 'SPA_PRIVATE_CONFIG\n'
+    mode += """while true; do
   timeout --kill-after=2s 20s fwknop --rc-file "$work/fwknoprc" -n keepalive --no-save-args >/dev/null 2>&1 &
   child=$!
   rc=0
@@ -110,26 +120,29 @@ while true; do
     printf '%s SPA send failed; retry next interval\\n' "$(date -Is)" >&2
   fi
   child=""
-  if [[ "${1:-}" == "--once" ]]; then exit "$rc"; fi
-  sleep ''' + str(c['interval_seconds']) + ''' &
+  if [[ "$mode" == once ]]; then exit "$rc"; fi
+  sleep """ + str(c['interval_seconds']) + """ &
   child=$!
   wait "$child"
   child=""
 done
-'''
+"""
+    return mode
 
-def generate(c, out):
+
+def generate(c, out, password=None):
     validate(c)
     out = Path(out)
     # New directory only: no partial overwrite of existing credentials.
     out.mkdir(mode=0o700, parents=True, exist_ok=False)
-    payload = json.dumps(c, ensure_ascii=False, separators=(',',':'))
+    exported = protect(c, password) if password is not None else c
+    payload = json.dumps(exported, ensure_ascii=False, separators=(',',':'))
     qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=4)
     qr.add_data(payload); qr.make(fit=True)
     image = io.BytesIO(); qr.make_image().save(image, format='PNG')
     private_write(out/'profile.json', payload.encode())
     private_write(out/'profile-qr.png', image.getvalue())
-    private_write(out/'keepalive.sh', script(c).encode(), 0o700)
+    private_write(out/'keepalive.sh', script(c, envelope=exported if password is not None else None).encode(), 0o700)
     return out
 
 def generate_keys(key_bytes=32, hmac_key_bytes=32):
@@ -154,7 +167,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest='cmd', required=True)
     v = sub.add_parser('validate'); v.add_argument('profile')
-    g = sub.add_parser('generate'); g.add_argument('profile'); g.add_argument('--out', required=True)
+    g = sub.add_parser('generate'); g.add_argument('profile'); g.add_argument('--out', required=True); g.add_argument('--protect', action='store_true', help='Шифровать весь профиль в JSON, QR и bash; пароль запрашивается')
     n = sub.add_parser('new'); n.add_argument('profile', help='Новый YAML с новыми случайными ключами')
     k = sub.add_parser('rekey', help='Новые SPA-ключи; это НЕ смена пароля Ansible Vault')
     k.add_argument('profile'); k.add_argument('--out', required=True, help='Новый файл профиля; исходник сохраняется')
@@ -177,7 +190,7 @@ def main():
         else:
             c = load(args.profile)
             if args.cmd == 'generate':
-                generate(c,args.out)
+                generate(c,args.out,password=ask_password(confirm=True) if args.protect else None)
             elif args.cmd == 'update-vault':
                 from vault_update import update_vault
                 result = update_vault(c, args.vault, password_file=args.vault_password_file,

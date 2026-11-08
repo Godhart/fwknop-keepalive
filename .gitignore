@@ -6,6 +6,7 @@ android/.gradle/
 android/local.properties
 android/**/build/
 *-export/
+*-profile/
 my-server.yaml
 new-device.yaml
 *.jks
@@ -16,3 +17,5 @@ vault.yaml
 vault.yml
 *.bak-*
 *.spa-update.lock
+
+android/**/.cxx/

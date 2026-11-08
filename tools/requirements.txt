@@ -2,3 +2,4 @@ PyYAML>=6.0,<7
 jsonschema>=4.23,<5
 qrcode[pil]>=8.0,<9
 ruamel.yaml>=0.18,<0.19
+cryptography>=42,<47

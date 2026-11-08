@@ -11,22 +11,7 @@ final class Profile {
     final JSONObject json;
     Profile(Context context, String text) throws Exception {
         if (text.getBytes(StandardCharsets.UTF_8).length > 8192) throw new Exception("QR слишком велик");
-        // Android JSONObject silently accepts duplicate fields; reject them explicitly.
-        JSONTokener tok = new JSONTokener(text);
-        if (tok.nextClean() != '{') throw new Exception("Ожидался JSON объект");
-        JSONObject data = new JSONObject();
-        if (tok.nextClean() != '}') {
-            tok.back();
-            while (true) {
-                Object key = tok.nextValue();
-                if (!(key instanceof String) || data.has((String)key) || tok.nextClean() != ':') throw new Exception("Некорректные или повторные поля");
-                data.put((String)key, tok.nextValue());
-                char ch = tok.nextClean();
-                if (ch == '}') break;
-                if (ch != ',') throw new Exception("Некорректный JSON");
-            }
-        }
-        if (tok.nextClean() != 0) throw new Exception("Данные после JSON");
+        JSONObject data = parseObject(text);
         String schemaText;
         try (java.io.InputStream in=context.getAssets().open("profile.schema.json")) {
             java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
@@ -69,6 +54,25 @@ final class Profile {
         if(i("interval_seconds")>=i("access_timeout_seconds")) throw new Exception("Период должен быть меньше срока доступа");
         key("key_base64",16,32); key("hmac_key_base64",32,64);
         if(s("key_base64").equals(s("hmac_key_base64"))) throw new Exception("Ключи должны отличаться");
+    }
+    static JSONObject parseObject(String text) throws Exception {
+        // Android JSONObject silently accepts duplicate fields; reject them explicitly.
+        JSONTokener tok = new JSONTokener(text);
+        if (tok.nextClean() != '{') throw new Exception("Ожидался JSON объект");
+        JSONObject data = new JSONObject();
+        if (tok.nextClean() != '}') {
+            tok.back();
+            while (true) {
+                Object key = tok.nextValue();
+                if (!(key instanceof String) || data.has((String)key) || tok.nextClean() != ':') throw new Exception("Некорректные или повторные поля");
+                data.put((String)key, tok.nextValue());
+                char ch = tok.nextClean();
+                if (ch == '}') break;
+                if (ch != ',') throw new Exception("Некорректный JSON");
+            }
+        }
+        if (tok.nextClean() != 0) throw new Exception("Данные после JSON");
+        return data;
     }
     byte[] key(String field,int min,int max) throws Exception {
         byte[] raw;
